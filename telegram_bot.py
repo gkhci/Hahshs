@@ -1,42 +1,32 @@
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import requests
 import json
 
+# تنظیمات
 BOT_TOKEN = "8793482183:AAEGUa7ZEURP26N34DzKvrudnndC3q7apBk"
 PANEL_URL = "http://localhost:5000"
-ADMIN_IDS = [8680457924]  
+ADMIN_PASSWORD = "admin123"
 
-bot = telebot.TeleBot(BOT_TOKEN)
-
-def get_panel_token():
-    response = requests.post(f"{PANEL_URL}/login", json={"password": "admin123"})
-    return response.json().get('token')
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("📊 آمار", callback_data="stats"),
-        InlineKeyboardButton("👥 کاربران", callback_data="users"),
-        InlineKeyboardButton("➕ افزودن کاربر", callback_data="add_user")
-    )
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("📊 آمار", callback_data="stats")],
+        [InlineKeyboardButton("👥 کاربران", callback_data="users")],
+        [InlineKeyboardButton("➕ افزودن کاربر", callback_data="add_user")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    bot.send_message(
-        message.chat.id,
-        "🤖 **پنل X-Panel**\n"
-        "به بات مدیریت خوش آمدید!",
-        reply_markup=keyboard,
+    await update.message.reply_text(
+        "🤖 **پنل X-Panel**\nبه بات مدیریت خوش آمدید!",
+        reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback(call):
-    token = get_panel_token()
-    headers = {'Authorization': f'Bearer {token}'}
-    
-    if call.data == "stats":
-        response = requests.get(f"{PANEL_URL}/api/stats", headers=headers)
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        # درخواست به پنل
+        response = requests.get(f"{PANEL_URL}/api/stats")
         stats = response.json()
         
         text = f"📊 **آمار پنل**\n\n"
@@ -44,14 +34,17 @@ def callback(call):
         text += f"✅ کاربران فعال: {stats['active_users']}\n"
         text += f"📦 ترافیک کل: {stats['total_traffic'] / (1024**3):.2f} GB"
         
-        bot.send_message(call.message.chat.id, text, parse_mode='Markdown')
-    
-    elif call.data == "users":
-        response = requests.get(f"{PANEL_URL}/api/users", headers=headers)
+        await update.callback_query.message.reply_text(text, parse_mode='Markdown')
+    except Exception as e:
+        await update.callback_query.message.reply_text(f"❌ خطا: {str(e)}")
+
+async def users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        response = requests.get(f"{PANEL_URL}/api/users")
         users = response.json()
         
         if not users:
-            bot.send_message(call.message.chat.id, "📭 هیچ کاربری یافت نشد")
+            await update.callback_query.message.reply_text("📭 هیچ کاربری یافت نشد")
             return
         
         text = "👥 **لیست کاربران:**\n\n"
@@ -60,8 +53,65 @@ def callback(call):
             limit = user['traffic_limit'] / (1024**3)
             text += f"• {user['name']}: {used:.1f}/{limit:.0f} GB ({user['status']})\n"
         
-        bot.send_message(call.message.chat.id, text, parse_mode='Markdown')
+        await update.callback_query.message.reply_text(text, parse_mode='Markdown')
+    except Exception as e:
+        await update.callback_query.message.reply_text(f"❌ خطا: {str(e)}")
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "stats":
+        await stats(update, context)
+    elif query.data == "users":
+        await users(update, context)
+    elif query.data == "add_user":
+        await query.message.reply_text(
+            "➕ **افزودن کاربر جدید**\n\n"
+            "فرمت:\n"
+            "/add [نام] [ترافیک_GB] [روز]\n\n"
+            "مثال:\n"
+            "/add علی 10 30"
+        )
+
+async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        args = context.args
+        if len(args) < 3:
+            await update.message.reply_text("⚠️ فرمت: /add [نام] [ترافیک_GB] [روز]")
+            return
+        
+        name = args[0]
+        traffic = int(args[1])
+        days = int(args[2])
+        
+        # ارسال به پنل
+        data = {
+            "name": name,
+            "traffic_limit": traffic,
+            "expiry_days": days
+        }
+        response = requests.post(f"{PANEL_URL}/api/users", json=data)
+        
+        if response.status_code == 200:
+            await update.message.reply_text(f"✅ کاربر {name} با موفقیت افزوده شد!")
+        else:
+            await update.message.reply_text(f"❌ خطا: {response.text}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطا: {str(e)}")
+
+def main():
+    # ایجاد اپلیکیشن
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # ثبت دستورات
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("add", add_user))
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # اجرا
+    print("🤖 بات در حال اجراست...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    print("🤖 بات در حال اجراست...")
-    bot.polling()
+    main()
