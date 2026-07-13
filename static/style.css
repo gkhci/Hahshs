@@ -1,0 +1,63 @@
+body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Vazir', sans-serif;
+}
+
+.navbar {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.stat-card {
+    border-radius: 15px;
+    border: none;
+    transition: transform 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.card {
+    background: #1a1a2e;
+    border: 1px solid #333;
+}
+
+.table {
+    color: #fff;
+}
+
+.table thead th {
+    border-bottom: 2px solid #444;
+    color: #667eea;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+}
+
+.btn-primary:hover {
+    transform: scale(1.05);
+}
+
+.modal-content {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+.form-control {
+    background: #2a2a3e;
+    border: 1px solid #444;
+    color: #fff;
+}
+
+.form-control:focus {
+    background: #2a2a3e;
+    border-color: #667eea;
+    color: #fff;
+}
+
+.badge {
+    padding: 8px 12px;
+}
